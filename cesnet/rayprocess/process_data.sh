@@ -1,6 +1,5 @@
 # init files names
 DATA_PLY="cloud.ply"
-TERRAIN_PLY="cloud_mesh.ply"
 TRUNKS_TXT="cloud_trunks.txt"
 FOREST_TXT="cloud_forest.txt"
 SEGMENTED_PLY="cloud_segmented.ply"
@@ -21,8 +20,6 @@ echo "$(date) raycloudtools processing start" >> $LOG_FILE
 # RUN raycloudtools in singularity to process the data
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayimport cloud.laz ray 0,0,-10 --remove_start_pos
 echo "$(date) loaded" >> $LOG_FILE
-singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract terrain $DATA_PLY
-echo "$(date) terrain extracted" >> $LOG_FILE
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract trunks $DATA_PLY
 echo "$(date) trunks extracted" >> $LOG_FILE
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract forest $DATA_PLY
@@ -36,7 +33,7 @@ max_decimation_level=20
 
 while true; do
     echo "$(date) attempting to extract trees with decimation level: $decimation_level" >> $LOG_FILE
-    singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract trees cloud_decimated.ply $TERRAIN_PLY
+    singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract trees cloud_decimated.ply
 
     # Check if the last command was successful
     if [ $? -eq 0 ]; then
