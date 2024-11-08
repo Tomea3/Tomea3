@@ -8,8 +8,6 @@ TREES_TXT="cloud_trees.txt"
 TREES_MESH_PLY="cloud_trees_mesh.ply"
 LEAVES_PLY="cloud_leaves.ply"
 
-# Log file
-LOG_FILE="process.log"
 
 # Start PDAL processing
 echo "$(date) pdal processing start" >> $LOG_FILE
