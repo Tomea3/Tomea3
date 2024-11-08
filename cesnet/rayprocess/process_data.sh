@@ -8,14 +8,16 @@ TREES_TXT="cloud_trees.txt"
 TREES_MESH_PLY="cloud_trees_mesh.ply"
 LEAVES_PLY="cloud_leaves.ply"
 
+LOG_FILE="processing.log"
 
+# Start logging
 echo "$(date) pdal processing start" >> $LOG_FILE
 singularity exec -B $SCRATCHDIR/:/data ./pdal.img pdal pipeline /data/pdal_pipeline.json
 echo "$(date) pdal processing end" >> $LOG_FILE
 
-
-
+# Start raycloudtools processing
 echo "$(date) raycloudtools processing start" >> $LOG_FILE
+
 # RUN raycloudtools in singularity to process the data
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayimport cloud.laz ray 0,0,-10 --remove_start_pos
 echo "$(date) loaded" >> $LOG_FILE
@@ -26,17 +28,17 @@ echo "$(date) trunks extracted" >> $LOG_FILE
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract forest $DATA_PLY
 echo "$(date) forest extracted" >> $LOG_FILE
 
-#singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract trees $DATA_PLY $TERRAIN_PLY
-
-# In case of insufficent RAM tree exraction is killed on cesnet
-# LOOP ITERATIVELY DECIMATES CLOUD BY HALF UNTILL TREES ARE EXTRACTED (start with full resolution)
-cp c$DATA_PLY cloud_decimated.ply
+# In case of insufficient RAM, tree extraction may be killed on CESNET
+# LOOP ITERATIVELY DECIMATES CLOUD BY HALF UNTIL TREES ARE EXTRACTED (start with full resolution)
+cp $DATA_PLY cloud_decimated.ply
 decimation_level=0  # Start with raydecimate at every 2nd ray
+max_decimation_level=20
+
 while true; do
     echo "$(date) attempting to extract trees with decimation level: $decimation_level" >> $LOG_FILE
     singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract trees cloud_decimated.ply $TERRAIN_PLY
-    
-    # Check if the last command was killed
+
+    # Check if the last command was successful
     if [ $? -eq 0 ]; then
         echo "$(date) trees extracted successfully" >> $LOG_FILE
         mv cloud_decimated_segmented.ply cloud_segmented.ply
@@ -45,21 +47,34 @@ while true; do
         rm cloud_decimated.ply
         break  # Exit loop on success
     else
+        # Check if decimation level is too high
+        if [ $decimation_level -ge $max_decimation_level ]; then
+            echo "$(date) maximum decimation level reached, exiting loop" >> $LOG_FILE
+            exit 1
+        fi
+        
         decimation_level=$((decimation_level + 2))  # Increase decimation by a factor of 2
         echo "$(date) rayextract trees failed, decimating to every $decimation_level-th ray" >> $LOG_FILE
+        
         # Decimate the ray cloud data
-        singularity exec -B $SCRATCHDIR:/data ./raycloudtools.img raydecimate $DATA_PLY $decimation_level rays
+        singularity exec -B $SCRATCHDIR:/data ./raycloudtools.img raydecimate $DATA_PLY cloud_decimated.ply $decimation_level rays
+        
+        # Ensure decimation output is successful
+        if [ $? -ne 0 ]; then
+            echo "$(date) raydecimate failed, exiting loop" >> $LOG_FILE
+            exit 1
+        fi
     fi
 done
-
 
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img rayextract leaves $DATA_PLY $TREES_TXT
 echo "$(date) leaves extracted" >> $LOG_FILE
 singularity exec -B $SCRATCHDIR/:/data ./raycloudtools.img treeinfo $TREES_TXT
 echo "$(date) treeinfo extracted" >> $LOG_FILE
 
+# Log files in SCRATCHDIR
 echo "lof in SCRATCHDIR:" >> $LOG_FILE
-echo "$(ls -lh)" >> $LOG_FILE
+echo "$(ls -lh $SCRATCHDIR)" >> $LOG_FILE
 echo "" >> $LOG_FILE
 
 # Create images for each segmented tree
@@ -79,4 +94,4 @@ for segment_file in ${SEGMENT_DIR}/*.ply; do
     #echo "Rendered image for $segment_file" >> $LOG_FILE
 done
 
-echo "$(date) segments exported" >> $LOG_FILE-h": executable file not found in $PATH
+echo "$(date) segments exported" >> $LOG_FILE
